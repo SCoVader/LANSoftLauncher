@@ -1,14 +1,10 @@
-[
-  {
-    "name": "Notepad",
-    "cmd": "notepad.exe"
-  },
-  {
-    "name": "Calculator",
-    "cmd": "calc.exe"
-  },
-  {
-    "name": "Paint",
-    "cmd": "mspaint.exe"
-  }
-]
+{
+  "role": "instructor",
+  "server_host": "",
+  "port": 8765,
+  "apps": [
+    {"name": "Notepad", "cmd": "notepad.exe"},
+    {"name": "Calculator", "cmd": "calc.exe"},
+    {"name": "Paint", "cmd": "mspaint.exe"}
+  ]
+}

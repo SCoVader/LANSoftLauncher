@@ -1,19 +1,136 @@
 import sys
 import json
 import subprocess
+import threading
+import socket
+import time
 from pathlib import Path
 from PySide6.QtWidgets import QApplication, QMainWindow, QLabel, QPushButton, QVBoxLayout, QWidget
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QGuiApplication, QCursor
+from PySide6.QtGui import QGuiApplication
+
+
+class TCPServer(threading.Thread):
+    def __init__(self, port: int = 8765, host: str = "0.0.0.0"):
+        super().__init__(daemon=True)
+        self.port = port
+        self.host = host
+        self._sock = None
+        self._clients = []
+        self._lock = threading.Lock()
+        self._running = True
+
+    def run(self):
+        try:
+            self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self._sock.bind((self.host, self.port))
+            self._sock.listen()
+            self._sock.settimeout(1.0)
+            while self._running:
+                try:
+                    conn, addr = self._sock.accept()
+                    conn.setblocking(True)
+                    with self._lock:
+                        self._clients.append(conn)
+                except socket.timeout:
+                    continue
+                except Exception:
+                    break
+        finally:
+            self.close()
+
+    def broadcast(self, data: bytes):
+        with self._lock:
+            to_remove = []
+            for c in list(self._clients):
+                try:
+                    c.sendall(data)
+                except Exception:
+                    try:
+                        c.close()
+                    except Exception:
+                        pass
+                    to_remove.append(c)
+            for r in to_remove:
+                if r in self._clients:
+                    self._clients.remove(r)
+
+    def close(self):
+        self._running = False
+        try:
+            if self._sock:
+                self._sock.close()
+        except Exception:
+            pass
+        with self._lock:
+            for c in self._clients:
+                try:
+                    c.close()
+                except Exception:
+                    pass
+            self._clients.clear()
+
+
+class TCPClient(threading.Thread):
+    def __init__(self, host: str, port: int, callback):
+        super().__init__(daemon=True)
+        self.host = host
+        self.port = port
+        self.callback = callback
+        self._running = True
+
+    def run(self):
+        if not self.host:
+            return
+        while self._running:
+            sock = None
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(5.0)
+                sock.connect((self.host, self.port))
+                sock.settimeout(None)
+                buf = b""
+                while self._running:
+                    data = sock.recv(4096)
+                    if not data:
+                        break
+                    buf += data
+                    while b"\n" in buf:
+                        line, buf = buf.split(b"\n", 1)
+                        try:
+                            payload = json.loads(line.decode("utf-8"))
+                            cmd = payload.get("cmd")
+                            if cmd:
+                                self.callback(cmd)
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+            finally:
+                try:
+                    if sock:
+                        sock.close()
+                except Exception:
+                    pass
+            # Retry after a short delay
+            time.sleep(2.0)
+
+    def stop(self):
+        self._running = False
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Kiosk Launcher")
-
-        # Load apps configuration (apps.json) or use defaults
+        
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.config_path = Path(__file__).parent / "apps.json"
-        self.apps = self.load_apps()
+        self.config = self.load_config()
+        self.apps = self.config.get("apps", [])
+        self.role = self.config.get("role", "standalone")
+        self.server_host = self.config.get("server_host", "")
+        self.port = int(self.config.get("port", 8765))
 
         # Black background, centered buttons
         self.setStyleSheet("background-color: black;")
@@ -24,17 +141,27 @@ class MainWindow(QMainWindow):
 
         self.label = QLabel("", alignment=Qt.AlignmentFlag.AlignCenter)
         self.label.setStyleSheet("color: white; font-size: 18px;")
-        layout.addWidget(self.label)
+        # Role behaviour: instructor shows buttons, listener waits for instructions
+        if self.role == "listener":
+            self.label.setText("Waiting for instructions...")
+            # Start client thread to listen for instructions
+            self.client = TCPClient(self.server_host, self.port, self.handle_remote_launch)
+            self.client.start()
+        else:
+            # Create a button for each configured app (instructor or standalone)
+            for entry in self.apps:
+                text = entry.get("name", "Launch")
+                cmd = entry.get("cmd", "")
+                btn = QPushButton(text)
+                btn.setFixedSize(420, 140)
+                btn.setStyleSheet("font-size:24px; background-color:#222; color: white; border-radius:8px;")
+                btn.clicked.connect(self.make_instructor_launcher(cmd))
+                layout.addWidget(btn, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        # Create a button for each configured app
-        for entry in self.apps:
-            text = entry.get("name", "Launch")
-            cmd = entry.get("cmd", "")
-            btn = QPushButton(text)
-            btn.setFixedSize(420, 140)
-            btn.setStyleSheet("font-size:24px; background-color:#222; color: white; border-radius:8px;")
-            btn.clicked.connect(self.make_launcher(cmd))
-            layout.addWidget(btn, alignment=Qt.AlignmentFlag.AlignCenter)
+            # If instructor role, start TCP server to accept listeners
+            if self.role == "instructor":
+                self.server = TCPServer(self.port)
+                self.server.start()
 
         # Allow Esc to quit
         self.shortcut_quit = QApplication.instance()
@@ -45,20 +172,33 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(container)
 
     def load_apps(self):
-        default = [
-            {"name": "Notepad", "cmd": "notepad.exe"},
-            {"name": "Calculator", "cmd": "calc.exe"},
-            {"name": "Paint", "cmd": "mspaint.exe"}
-        ]
+        # (deprecated) kept for backward compat
+        return []
+
+    def load_config(self):
+        default = {
+            "role": "standalone",
+            "server_host": "",
+            "port": 8765,
+            "apps": [
+                {"name": "Notepad", "cmd": "notepad.exe"},
+                {"name": "Calculator", "cmd": "calc.exe"},
+                {"name": "Paint", "cmd": "mspaint.exe"}
+            ]
+        }
         try:
             if self.config_path.exists():
                 with open(self.config_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    if isinstance(data, list) and data:
-                        return data
+                    # Accept either list (legacy) or dict (new)
+                    if isinstance(data, dict):
+                        return {**default, **data}
+                    elif isinstance(data, list) and data:
+                        default["apps"] = data
+                        return default
         except Exception:
             pass
-        # If no config present, write a default one for the user to edit
+        # Write default config if missing
         try:
             with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(default, f, indent=2)
@@ -80,6 +220,37 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(150, QApplication.quit)
         return _launch
 
+    def make_instructor_launcher(self, cmd):
+        def _launch_and_broadcast():
+            # Launch locally
+            try:
+                subprocess.Popen(cmd, shell=True)
+            except Exception:
+                try:
+                    subprocess.Popen([cmd])
+                except Exception:
+                    pass
+            # Broadcast to connected listeners if server running
+            try:
+                if hasattr(self, "server"):
+                    msg = json.dumps({"cmd": cmd}) + "\n"
+                    self.server.broadcast(msg.encode("utf-8"))
+            except Exception:
+                pass
+            QTimer.singleShot(150, QApplication.quit)
+        return _launch_and_broadcast
+
+    def handle_remote_launch(self, cmd: str):
+        # Called by client thread when an instruction arrives
+        try:
+            subprocess.Popen(cmd, shell=True)
+        except Exception:
+            try:
+                subprocess.Popen([cmd])
+            except Exception:
+                pass
+        QTimer.singleShot(150, QApplication.quit)
+
     def on_button_click(self):
         self.label.setText("Button Clicked!")
 
@@ -88,16 +259,13 @@ if __name__ == "__main__":
 
     window = MainWindow()
 
-    # Try to show on the screen where the mouse currently is (works for multi-monitor setups)
-    try:
-        screen = QGuiApplication.screenAt(QCursor.pos())
-        if screen is None:
-            screen = QGuiApplication.primaryScreen()
-        if screen:
-            geom = screen.geometry()
-            window.setGeometry(geom)
-    except Exception:
-        pass
-
-    window.showFullScreen()
+    geom = QGuiApplication.primaryScreen().geometry()
+    screens = QGuiApplication.screens()
+    if screens:
+        for screen in screens:
+            geom = geom.united(screen.geometry())
+    window.setGeometry(geom)
+    
+    
+    window.show()
     sys.exit(app.exec())
