@@ -11,12 +11,15 @@ from network import TCPClient, TCPServer
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, config_path: str | None = None):
         super().__init__()
         self.setWindowTitle("Kiosk Launcher")
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
-
-        self.config_path = Path(__file__).resolve().parent / "apps.json"
+        # Default config filename is `config.json` in the app folder
+        if config_path:
+            self.config_path = Path(config_path)
+        else:
+            self.config_path = Path(__file__).resolve().parent / "config.json"
         self.config = load_config(self.config_path)
         self.apps = self.config.get("apps", [])
         self.role = self.config.get("role", "standalone")
@@ -83,7 +86,7 @@ class MainWindow(QMainWindow):
 
     def handle_remote_launch(self, cmd: str):
         self._start_app(cmd)
-        self._exit_launcher()
+        QTimer.singleShot(150, QApplication.quit)
 
     def show_on_monitor(self):
         geom = QGuiApplication.primaryScreen().geometry()

@@ -49,5 +49,10 @@ Use the instructor machine IP address in `server_host` for each listener.
 python main.py
 ```
 
+```bash 
+# You can specify config file name
+python main.py --config instructor_config.json
+python main.py --config listener_config.json
+```
 On the instructor machine, clicking a button launches the app on the instructor and sends the same command to all connected listeners.
 On listener machines, a black screen shows `Waiting for instructions...` until the command arrives.

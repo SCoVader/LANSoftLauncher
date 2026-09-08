@@ -1,0 +1,10 @@
+{
+  "role": "listener",
+  "server_host": "127.0.0.1",
+  "port": 8765,
+  "apps": [
+    {"name": "Notepad", "cmd": "notepad.exe"},
+    {"name": "Calculator", "cmd": "calc.exe"},
+    {"name": "Paint", "cmd": "mspaint.exe"}
+  ]
+}
