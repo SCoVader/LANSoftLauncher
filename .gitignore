@@ -6,3 +6,6 @@ venv/
 # Ignore Python bytecode and temporary files
 __pycache__/
 *.py[cod]
+
+# Ignore dev. notes
+TODO

@@ -5,6 +5,7 @@
   "apps": [
     {"name": "Notepad", "cmd": "notepad.exe"},
     {"name": "Calculator", "cmd": "calc.exe"},
-    {"name": "Paint", "cmd": "mspaint.exe"}
+    {"name": "Paint", "cmd": "mspaint.exe"},
+    {"name": "Custom command", "cmd": "echo Hello && pause /b"}
   ]
 }

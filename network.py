@@ -95,9 +95,10 @@ class TCPClient(threading.Thread):
                         line, buffer = buffer.split(b"\n", 1)
                         try:
                             payload = json.loads(line.decode("utf-8"))
-                            cmd = payload.get("cmd")
-                            if cmd:
-                                self.callback(cmd)
+                            if payload.get("cmd"):
+                                self.callback({"cmd": payload["cmd"]})
+                            elif payload.get("action"):
+                                self.callback({"action": payload["action"]})
                         except Exception:
                             pass
             except Exception:
