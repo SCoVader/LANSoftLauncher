@@ -67,12 +67,40 @@ python main.py --config instructor.json
 python main.py --config listener.json
 ```
 
+On first launch, the launcher asks for an administrator password. It stores the password hash in the binary `admin_password.bin` file and accumulated operating time in the binary `operating_time.bin` file beside the selected configuration file. To reset the operating-time counter, run:
+
+```bash
+python main.py --config instructor.json --reset-clock YOUR_PASSWORD
+```
+
+## Build With PyInstaller
+
+The repository includes `Launcher.spec`, which configures a one-file Windows build and bundles the `icons` directory. Install the dependencies, including PyInstaller, and run the build from the project directory:
+
+```powershell
+pip install -r requirements.txt
+pyinstaller.exe .\Launcher.spec --clean
+```
+
+The generated executable is `dist\Launcher.exe`. Copy the required configuration file beside the executable, then select it when starting the launcher:
+
+```powershell
+.\dist\Launcher.exe --config instructor.json
+.\dist\Launcher.exe --config listener.json
+```
+
+The first run creates `admin_password.bin` and `operating_time.bin` beside the selected configuration file. To reset the operating-time counter in the packaged application, run:
+
+```powershell
+.\dist\Launcher.exe --config instructor.json --reset-clock YOUR_PASSWORD
+```
+
 ## Behavior
 
 - On the instructor machine, clicking an app button launches the app locally and broadcasts it to the listeners.
 - The system action buttons also trigger the action locally and send the command to all connected listeners.
 - On listener machines, a black screen displays `Waiting for instructions...` until data is received.
-- The clock indicates approximate operating time since the launcher started, which is useful for kiosk deployments that run only part of the day.
+- The clock indicates accumulated operating time across launcher sessions and is saved every ten minutes and during graceful shutdown.
 
 ## Notes
 

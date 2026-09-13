@@ -9,3 +9,7 @@ __pycache__/
 
 # Ignore dev. notes
 TODO
+admin_password.bin
+operating_time.bin
+dist/
+build/
