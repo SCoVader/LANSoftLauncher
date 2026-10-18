@@ -1,5 +1,10 @@
 # Changelog
 
+## Version 0.7.1
+
+- Clarified listener connection status: it shows `Waiting for connection...` while disconnected and
+  `Connected. Waiting for command...` after successful server authentication.
+
 ## Version 0.7
 
 - Added LAN discovery so listeners can find an instructor without a configured server IP address.

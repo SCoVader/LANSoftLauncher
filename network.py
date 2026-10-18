@@ -42,6 +42,11 @@ class TCPServer(threading.Thread):
                     connection, _ = self._sock.accept()
                     connection.settimeout(2.0)
                     if self._authenticate(connection):
+                        try:
+                            connection.sendall(b'{"type":"authenticated"}\n')
+                        except OSError:
+                            connection.close()
+                            continue
                         connection.settimeout(None)
                         with self._lock:
                             self._clients.append(connection)
@@ -132,13 +137,25 @@ class TCPServer(threading.Thread):
 
 
 class TCPClient(threading.Thread):
-    def __init__(self, host: str, port: int, callback, system_name: str = "complex1"):
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        callback,
+        system_name: str = "complex1",
+        connection_callback=None,
+    ):
         super().__init__(daemon=True)
         self.host = host
         self.port = port
         self.callback = callback
         self.system_name = system_name
+        self.connection_callback = connection_callback
         self._running = True
+
+    def _set_connected(self, connected: bool):
+        if self.connection_callback is not None:
+            self.connection_callback(connected)
 
     def _discover_server(self):
         request = json.dumps(
@@ -169,6 +186,7 @@ class TCPClient(threading.Thread):
     def run(self):
         while self._running:
             sock = None
+            connected = False
             try:
                 server_address = (self.host, self.port) if self.host else self._discover_server()
                 if server_address is None:
@@ -182,8 +200,24 @@ class TCPClient(threading.Thread):
                     {"type": "authenticate", "system_name": self.system_name}
                 )
                 sock.sendall((authentication + "\n").encode("utf-8"))
+                sock.settimeout(5.0)
+                buffer = bytearray()
+                while b"\n" not in buffer:
+                    data = sock.recv(4096)
+                    if not data:
+                        raise ConnectionError("Server closed before authentication completed")
+                    buffer.extend(data)
+                authentication_response, _, remaining = buffer.partition(b"\n")
+                payload = json.loads(authentication_response.decode("utf-8"))
+                if (
+                    not isinstance(payload, dict)
+                    or payload.get("type") != "authenticated"
+                ):
+                    raise ConnectionError("Server did not confirm authentication")
+                connected = True
+                self._set_connected(True)
                 sock.settimeout(1.0)
-                buffer = b""
+                buffer = bytearray(remaining)
                 while self._running:
                     try:
                         data = sock.recv(4096)
@@ -193,7 +227,7 @@ class TCPClient(threading.Thread):
                         break
                     buffer += data
                     while b"\n" in buffer:
-                        line, buffer = buffer.split(b"\n", 1)
+                        line, _, buffer = buffer.partition(b"\n")
                         try:
                             payload = json.loads(line.decode("utf-8"))
                             if payload.get("cmd"):
@@ -205,6 +239,8 @@ class TCPClient(threading.Thread):
             except Exception:
                 pass
             finally:
+                if connected:
+                    self._set_connected(False)
                 try:
                     if sock is not None:
                         sock.close()

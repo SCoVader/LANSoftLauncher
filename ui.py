@@ -8,7 +8,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QTimer, Qt, QSize
+from PySide6.QtCore import QTimer, Qt, QSize, Signal
 from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtWidgets import QInputDialog, QLabel, QHBoxLayout, QMainWindow, QPushButton, QVBoxLayout, QWidget, QLineEdit
 
@@ -78,6 +78,8 @@ def save_operating_time(path: str | Path, total_seconds: float | int) -> None:
 
 
 class MainWindow(QMainWindow):
+    connection_status_changed = Signal(bool)
+
     def __init__(self, config_path: str | None = None):
         super().__init__()
         self.setWindowTitle("Kiosk Launcher")
@@ -110,9 +112,14 @@ class MainWindow(QMainWindow):
         self.my_layout.addWidget(self.label)
 
         if self.role == "listener":
-            self.label.setText("Waiting for instructions...")
+            self.label.setText("Waiting for connection...")
+            self.connection_status_changed.connect(self._update_connection_status)
             self.client = TCPClient(
-                self.server_host, self.port, self.handle_remote_launch, self.system_name
+                self.server_host,
+                self.port,
+                self.handle_remote_launch,
+                self.system_name,
+                self.connection_status_changed.emit,
             )
             self.client.start()
         else:
@@ -325,6 +332,15 @@ class MainWindow(QMainWindow):
             self._minimize_launcher()
             return
         self._handle_remote_payload(payload)
+
+    def _update_connection_status(self, connected: bool):
+        if self.role == "listener":
+            status = (
+                "Connected. Waiting for command..."
+                if connected
+                else "Waiting for connection..."
+            )
+            self.label.setText(status)
 
     def _update_operating_time(self):
         self.clock_label.setText(format_operating_time(self._current_operating_seconds()))
