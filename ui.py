@@ -94,6 +94,7 @@ class MainWindow(QMainWindow):
         self.role = self.config.get("role", "standalone")
         self.server_host = self.config.get("server_host", "")
         self.port = int(self.config.get("port", 8765))
+        self.system_name = self.config.get("system_name", "complex1")
         self._sound_muted = False
         self._operating_seconds = load_operating_time(self.operating_time_path)
         self._started_at = time.monotonic()
@@ -110,7 +111,9 @@ class MainWindow(QMainWindow):
 
         if self.role == "listener":
             self.label.setText("Waiting for instructions...")
-            self.client = TCPClient(self.server_host, self.port, self.handle_remote_launch)
+            self.client = TCPClient(
+                self.server_host, self.port, self.handle_remote_launch, self.system_name
+            )
             self.client.start()
         else:
             for entry in self.apps:
@@ -123,7 +126,7 @@ class MainWindow(QMainWindow):
                 self.my_layout.addWidget(btn, alignment=Qt.AlignmentFlag.AlignCenter)
 
             if self.role == "instructor":
-                self.server = TCPServer(self.port)
+                self.server = TCPServer(self.port, system_name=self.system_name)
                 self.server.start()
 
         self._add_system_controls()
@@ -342,4 +345,3 @@ class MainWindow(QMainWindow):
                 geom = geom.united(screen.geometry())
         self.setGeometry(geom)
         self.show()
-

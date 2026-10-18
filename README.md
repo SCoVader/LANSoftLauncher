@@ -21,9 +21,9 @@ This project is a kiosk-style launcher for Windows machines. It supports two rol
 
 1. Install dependencies:
 
-```bash
-pip install -r requirements.txt
-```
+  ```bash
+  pip install -r requirements.txt
+  ```
 
 2. Configure the launcher using `config.json`, `instructor.json`, or `listener.json`.
 
@@ -32,6 +32,7 @@ Example instructor config:
 ```json
 {
   "role": "instructor",
+  "system_name": "complex1",
   "server_host": "",
   "port": 8765,
   "apps": [
@@ -47,13 +48,18 @@ Example listener config:
 ```json
 {
   "role": "listener",
-  "server_host": "10.0.0.15",
+  "system_name": "complex1",
+  "server_host": "",
   "port": 8765,
   "apps": []
 }
 ```
 
-Use the instructor machine IP address in `server_host` for each listener.
+Give each complex a unique `system_name`, shared by its instructor and listeners. Listeners with an empty
+`server_host` discover a matching instructor over the LAN; a configured `server_host`
+continues to use a fixed IP. The instructor only accepts TCP clients with a matching
+`system_name`. Allow UDP discovery and TCP connections on the configured `port` through
+the local firewall.
 
 3. Run the launcher on each device:
 

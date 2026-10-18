@@ -1,5 +1,12 @@
 # Changelog
 
+## Version 0.7
+
+- Added LAN discovery so listeners can find an instructor without a configured server IP address.
+- Added `system_name` matching for discovery and TCP connections, preventing launchers configured for different complexes from connecting.
+- Added `system_name` to the default and example configurations; listeners can still use a fixed `server_host` when desired.
+- Added network tests covering discovery and connection acceptance for matching and non-matching system names.
+
 ## Version 0.6
 
 - Added administrator password protection using a salted PBKDF2-HMAC-SHA256 password digest stored in `admin_password.bin`.

@@ -1,6 +1,7 @@
 {
   "role": "listener",
-  "server_host": "127.0.0.1",
+  "system_name": "complex1",
+  "server_host": "",
   "port": 8765,
   "apps": [
     {"name": "Notepad", "cmd": "notepad.exe"},

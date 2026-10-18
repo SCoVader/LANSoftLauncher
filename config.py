@@ -4,6 +4,7 @@ from typing import Any, Dict
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "role": "standalone",
+    "system_name": "complex1",
     "server_host": "",
     "port": 8765,
     "apps": [
