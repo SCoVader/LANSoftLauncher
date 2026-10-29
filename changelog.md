@@ -1,5 +1,15 @@
 # Changelog
 
+## Version 0.9
+
+- Restored normal local and remote shutdown/reboot execution.
+- Added `-d` / `--debug` to log shutdown/reboot actions without executing or broadcasting them.
+
+## Version 0.8
+
+- Added file logging for launcher lifecycle, application launches, system actions, mute state, listener connections, and operating-time saves.
+- Changed shutdown and reboot requests to log-only behavior for safe testing; they no longer execute operating-system actions.
+
 ## Version 0.7.1
 
 - Clarified listener connection status: it shows `Waiting for connection...` while disconnected and

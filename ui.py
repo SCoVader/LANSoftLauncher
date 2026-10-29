@@ -1,6 +1,7 @@
 import ctypes
 import hashlib
 import json
+import logging
 import os
 import secrets
 import struct
@@ -15,6 +16,9 @@ from PySide6.QtWidgets import QInputDialog, QLabel, QHBoxLayout, QMainWindow, QP
 from config import load_config
 from network import TCPClient, TCPServer
 from paths import resource_path
+
+
+logger = logging.getLogger("lansoftlauncher")
 
 
 def format_operating_time(total_seconds: float | int) -> str:
@@ -80,8 +84,9 @@ def save_operating_time(path: str | Path, total_seconds: float | int) -> None:
 class MainWindow(QMainWindow):
     connection_status_changed = Signal(bool)
 
-    def __init__(self, config_path: str | None = None):
+    def __init__(self, config_path: str | None = None, *, debug: bool = False):
         super().__init__()
+        self.debug = debug
         self.setWindowTitle("Kiosk Launcher")
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         if config_path:
@@ -89,6 +94,11 @@ class MainWindow(QMainWindow):
         else:
             self.config_path = Path(resource_path("config.json"))
         self.config = load_config(self.config_path)
+        logger.info(
+            "Launcher initialized: role=%s system_name=%s",
+            self.config.get("role", "standalone"),
+            self.config.get("system_name", "complex1"),
+        )
         self.password_path = self.config_path.parent / PASSWORD_FILE_NAME
         self.operating_time_path = self.config_path.parent / OPERATING_TIME_FILE_NAME
         self._ensure_admin_password()
@@ -182,6 +192,7 @@ class MainWindow(QMainWindow):
     def _persist_operating_time(self):
         self._operating_seconds = self._current_operating_seconds()
         save_operating_time(self.operating_time_path, self._operating_seconds)
+        logger.info("Operating time saved: %s seconds", self._operating_seconds)
 
     def _icon_path(self, file_name: str) -> Path:
         return Path(resource_path(os.path.join("icons", file_name)))
@@ -247,6 +258,7 @@ class MainWindow(QMainWindow):
             self._set_master_volume_toggle()
         self._sound_muted = desired_state
         self._update_sound_button_icon()
+        logger.info("Mute state changed: muted=%s", self._sound_muted)
 
     def _set_master_volume_toggle(self):
         if os.name != "nt":
@@ -257,9 +269,13 @@ class MainWindow(QMainWindow):
             user32.keybd_event(volume_mute_key, 0, 0, 0)
             user32.keybd_event(volume_mute_key, 0, 0x0002, 0)
         except Exception:
-            pass
+            logger.exception("Failed to toggle master volume")
 
     def _request_system_action(self, action: str):
+        logger.info("System action requested: %s", action)
+        if self.debug and action in {"shutdown", "reboot"}:
+            self._execute_system_action(action)
+            return
         self._broadcast_system_action(action)
         self._execute_system_action(action)
 
@@ -267,23 +283,37 @@ class MainWindow(QMainWindow):
         try:
             if hasattr(self, "server"):
                 self.server.broadcast(build_system_action_payload(action))
+                logger.info("System action broadcast: %s", action)
         except Exception:
-            pass
+            logger.exception("Failed to broadcast system action: %s", action)
 
     def _execute_system_action(self, action: str):
+        commands = {
+            "shutdown": ["shutdown", "/s", "/t", "0"],
+            "reboot": ["shutdown", "/r", "/t", "0"],
+        }
+        command = commands.get(action)
+        if command is None:
+            logger.warning("Unsupported system action ignored: %s", action)
+            return
+
         self._persist_operating_time()
-        if action == "shutdown":
-            try:
-                subprocess.run(["shutdown", "/s", "/t", "0"], check=False)
-            except Exception:
-                pass
-        elif action == "reboot":
-            try:
-                subprocess.run(["shutdown", "/r", "/t", "0"], check=False)
-            except Exception:
-                pass
+        if self.debug:
+            logger.info("System action recorded (debug mode, not executed): %s", action)
+            return
+
+        try:
+            result = subprocess.run(command, check=False)
+            logger.info(
+                "System action executed: %s returncode=%s",
+                action,
+                result.returncode,
+            )
+        except OSError:
+            logger.exception("Failed to execute system action: %s", action)
 
     def _handle_system_action(self, action: str, *, is_remote: bool = False):
+        logger.info("System action received: %s remote=%s", action, is_remote)
         if action in {"shutdown", "reboot"}:
             if not is_remote:
                 self._request_system_action(action)
@@ -293,13 +323,14 @@ class MainWindow(QMainWindow):
             self._toggle_sound(force_state=action == "mute")
 
     def _start_app(self, cmd: str):
+        logger.info("Application launch requested: %s", cmd)
         try:
             subprocess.Popen(cmd, shell=True)
         except Exception:
             try:
                 subprocess.Popen([cmd])
             except Exception:
-                pass
+                logger.exception("Failed to launch application: %s", cmd)
 
     def _minimize_launcher(self):
         self.showMinimized()
@@ -311,14 +342,16 @@ class MainWindow(QMainWindow):
                 if hasattr(self, "server"):
                     payload = (json.dumps({"cmd": cmd}) + "\n").encode("utf-8")
                     self.server.broadcast(payload)
+                    logger.info("Application launch broadcast: %s", cmd)
             except Exception:
-                pass
+                logger.exception("Failed to broadcast application launch: %s", cmd)
             self._minimize_launcher()
 
         return _launch_and_broadcast
 
     def _handle_remote_payload(self, payload: dict):
         if payload.get("cmd"):
+            logger.info("Remote application launch received: %s", payload["cmd"])
             self._start_app(payload["cmd"])
             self._minimize_launcher()
             return
@@ -334,6 +367,7 @@ class MainWindow(QMainWindow):
         self._handle_remote_payload(payload)
 
     def _update_connection_status(self, connected: bool):
+        logger.info("Listener connection state changed: connected=%s", connected)
         if self.role == "listener":
             status = (
                 "Connected. Waiting for command..."
@@ -346,6 +380,7 @@ class MainWindow(QMainWindow):
         self.clock_label.setText(format_operating_time(self._current_operating_seconds()))
 
     def closeEvent(self, event):
+        logger.info("Launcher closing")
         self._persist_operating_time()
         if hasattr(self, "client"):
             self.client.stop()

@@ -67,6 +67,13 @@ the local firewall.
 python main.py
 ```
 
+For safe testing, add `-d` or `--debug` to log shutdown/reboot requests without executing or broadcasting them:
+
+```bash
+python main.py --debug
+python main.py --config instructor.json -d
+```
+
 ```bash
 # You can specify a config file name
 python main.py --config instructor.json
@@ -104,7 +111,9 @@ The first run creates `admin_password.bin` and `operating_time.bin` beside the s
 ## Behavior
 
 - On the instructor machine, clicking an app button launches the app locally and broadcasts it to the listeners.
-- The system action buttons also trigger the action locally and send the command to all connected listeners.
+- Shutdown and reboot buttons execute the action locally and broadcast it to connected listeners by default.
+- In debug mode (`-d` or `--debug`), shutdown and reboot actions are logged locally but neither executed nor broadcast.
+- Launcher startup, application launches, system actions, mute state, listener connection state, and operating-time saves are recorded in `launcher.log` beside the selected configuration file.
 - On listener machines, a black screen displays `Waiting for instructions...` until data is received.
 - The clock indicates accumulated operating time across launcher sessions and is saved every ten minutes and during graceful shutdown.
 
