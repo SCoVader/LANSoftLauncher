@@ -74,6 +74,14 @@ python main.py --debug
 python main.py --config instructor.json -d
 ```
 
+For a text menu without the kiosk UI, use `-t` or `--terminal`. The menu reserves `0` for system actions, and numbers config actions starting at `1`. Use `-e N` or `--execute N` to launch a config action directly by that number; system actions are not available through `-e`.
+
+```bash
+python main.py --terminal
+python main.py --config instructor.json -t
+python main.py --config instructor.json --execute 1
+```
+
 ```bash
 # You can specify a config file name
 python main.py --config instructor.json
@@ -113,6 +121,7 @@ The first run creates `admin_password.bin` and `operating_time.bin` beside the s
 - On the instructor machine, clicking an app button launches the app locally and broadcasts it to the listeners.
 - Shutdown and reboot buttons execute the action locally and broadcast it to connected listeners by default.
 - In debug mode (`-d` or `--debug`), shutdown and reboot actions are logged locally but neither executed nor broadcast.
+- Terminal mode displays configured app commands and a submenu for shutdown, reboot, and mute toggle without opening the kiosk UI.
 - Launcher startup, application launches, system actions, mute state, listener connection state, and operating-time saves are recorded in `launcher.log` beside the selected configuration file.
 - On listener machines, a black screen displays `Waiting for instructions...` until data is received.
 - The clock indicates accumulated operating time across launcher sessions and is saved every ten minutes and during graceful shutdown.

@@ -1,5 +1,10 @@
 # Changelog
 
+## Version 1.0
+
+- Added terminal-only interactive menu mode with access to configured app commands and local system actions.
+- Added `-e` / `--execute N` to launch a numbered config action directly, excluding system actions.
+
 ## Version 0.9
 
 - Restored normal local and remote shutdown/reboot execution.

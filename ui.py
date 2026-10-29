@@ -16,6 +16,7 @@ from PySide6.QtWidgets import QInputDialog, QLabel, QHBoxLayout, QMainWindow, QP
 from config import load_config
 from network import TCPClient, TCPServer
 from paths import resource_path
+from system_actions import execute_system_action
 
 
 logger = logging.getLogger("lansoftlauncher")
@@ -288,29 +289,11 @@ class MainWindow(QMainWindow):
             logger.exception("Failed to broadcast system action: %s", action)
 
     def _execute_system_action(self, action: str):
-        commands = {
-            "shutdown": ["shutdown", "/s", "/t", "0"],
-            "reboot": ["shutdown", "/r", "/t", "0"],
-        }
-        command = commands.get(action)
-        if command is None:
+        if action not in {"shutdown", "reboot"}:
             logger.warning("Unsupported system action ignored: %s", action)
             return
-
         self._persist_operating_time()
-        if self.debug:
-            logger.info("System action recorded (debug mode, not executed): %s", action)
-            return
-
-        try:
-            result = subprocess.run(command, check=False)
-            logger.info(
-                "System action executed: %s returncode=%s",
-                action,
-                result.returncode,
-            )
-        except OSError:
-            logger.exception("Failed to execute system action: %s", action)
+        execute_system_action(action, debug=self.debug)
 
     def _handle_system_action(self, action: str, *, is_remote: bool = False):
         logger.info("System action received: %s remote=%s", action, is_remote)

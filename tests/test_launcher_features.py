@@ -2,6 +2,7 @@ import json
 from unittest.mock import Mock, patch
 
 from app_logging import configure_logging
+from main import execute_config_command, run_system_action_menu, run_terminal_menu
 from ui import (
     MainWindow,
     build_system_action_payload,
@@ -78,6 +79,49 @@ def test_normal_system_action_request_broadcasts_and_executes():
 
     window._broadcast_system_action.assert_called_once_with("shutdown")
     window._execute_system_action.assert_called_once_with("shutdown")
+
+
+def test_execute_config_command_uses_one_based_command_number():
+    config = {"apps": [{"name": "First", "cmd": "first.exe"}]}
+    with patch("main.subprocess.Popen") as popen:
+        assert execute_config_command(config, 1) == 0
+
+    popen.assert_called_once_with("first.exe", shell=True)
+
+
+def test_execute_config_command_rejects_system_actions_and_invalid_numbers():
+    with patch("main.subprocess.Popen") as popen:
+        assert execute_config_command({"apps": [{"name": "App", "cmd": "app"}]}, 0) == 2
+        assert execute_config_command({"apps": [{"name": "App", "cmd": "app"}]}, 2) == 2
+
+    popen.assert_not_called()
+
+
+def test_terminal_menu_lists_config_actions_and_runs_selected_command():
+    output = []
+    selections = iter(["1", "q"])
+    config = {"apps": [{"name": "Notepad", "cmd": "notepad.exe"}]}
+
+    with patch("main.subprocess.Popen") as popen:
+        result = run_terminal_menu(config, debug=False, input_fn=lambda _: next(selections), output_fn=output.append)
+
+    assert result == 0
+    assert "0. System actions" in output
+    assert "1. Notepad" in output
+    popen.assert_called_once_with("notepad.exe", shell=True)
+
+
+def test_system_action_menu_passes_debug_mode():
+    selections = iter(["1"])
+    with patch("main.execute_system_action") as execute:
+        should_continue = run_system_action_menu(
+            True,
+            input_fn=lambda _: next(selections),
+            output_fn=lambda _: None,
+        )
+
+    assert should_continue
+    execute.assert_called_once_with("shutdown", debug=True)
 
 
 def test_binary_admin_password_and_operating_time_records(tmp_path):
